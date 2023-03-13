@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 class FollowerViewModel: ViewModel(), DefaultLifecycleObserver {
 	
 	private val repository = FollowerRepository()
-	val eventBus = object: EventBus<Event> {
+	private val eventBus = object: EventBus<Event> {
 		private val mutableEvent = MutableSharedFlow<Event>()
 		override val events: SharedFlow<Event>
 			get() = mutableEvent.asSharedFlow()
@@ -32,47 +32,50 @@ class FollowerViewModel: ViewModel(), DefaultLifecycleObserver {
 	val data = MutableLiveData<MRData>()
 	val status = MutableLiveData(State.READY)
 	
+	private fun updateData(newData: MRData) {
+		data.postValue(newData)
+		status.postValue(State.READY)
+	}
+	
+	private fun handleError(errorMsg: String, e: Exception) {
+		Logger.e(errorMsg, e)
+		status.postValue(State.ERROR)
+	}
+	
+	private suspend fun getResponse(path: String) {
+		status.postValue(State.LOADING)
+		repository.getResponse(path).also { updateData(it.data) }
+	}
+	
 	private suspend fun getCurrentDriverStandings() {
 		try {
-			repository.getResponse("current/driverStandings").also {
-				data.postValue(it.data)
-			}
+			getResponse("current/driverStandings")
 		} catch (e: Exception) {
-			Logger.e("failed to fetch current standings", e)
-			status.postValue(State.ERROR)
+			handleError("failed to fetch current standings", e)
 		}
 	}
 	
-	private suspend fun getCurrentConstructorStandins() {
+	private suspend fun getCurrentConstructorStandings() {
 		try {
-			repository.getResponse("current/constructorStandings").also {
-				data.postValue(it.data)
-			}
+			getResponse("current/constructorStandings")
 		} catch (e: Exception) {
-			Logger.e("failed to fetch current standings", e)
-			status.postValue(State.ERROR)
+			handleError("failed to fetch current standings", e)
 		}
 	}
 	
 	private suspend fun getCurrentRaceSchedule() {
 		try {
-			repository.getResponse("current").also {
-				data.postValue(it.data)
-			}
+			getResponse("current")
 		} catch (e: Exception) {
-			Logger.e("failed to fetch current schedule", e)
-			status.postValue(State.ERROR)
+			handleError("failed to fetch current schedule", e)
 		}
 	}
 	
 	private suspend fun getMostRecentRaceResult() {
 		try {
-			repository.getResponse("current/last/results").also {
-				data.postValue(it.data)
-			}
+			getResponse("current/last/results")
 		} catch (e: Exception) {
-			Logger.e("failed. fetch last race result", e)
-			status.postValue(State.ERROR)
+			handleError("failed. fetch last race result", e)
 		}
 	}
 	
@@ -81,7 +84,7 @@ class FollowerViewModel: ViewModel(), DefaultLifecycleObserver {
 			Logger.d("new event: $event")
 			when(event) {
 				is Event.CurrentDriverStandings -> { getCurrentDriverStandings() }
-				is Event.CurrentConstructorStandings -> { getCurrentConstructorStandins() }
+				is Event.CurrentConstructorStandings -> { getCurrentConstructorStandings() }
 				is Event.CurrentRaceSchedule -> { getCurrentRaceSchedule() }
 				is Event.MostRecentRaceResult -> { getMostRecentRaceResult() }
 				else -> { Logger.e("Unidentified event passed") }
